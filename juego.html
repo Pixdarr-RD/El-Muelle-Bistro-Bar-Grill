@@ -15,21 +15,22 @@ Todos los derechos reservados
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Come Bolas - PIXDARR</title>
+<title>TRAGA BOLAS - PIXDARR</title>
 
 <style>
 html, body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: black;
+  background: radial-gradient(circle at center, #111, #000);
   height: 100%;
   font-family: Arial, sans-serif;
+  color: white;
 }
 
 canvas {
   display: none;
-  background: #111;
+  background: transparent;
 }
 
 .screen {
@@ -40,7 +41,6 @@ canvas {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  color: white;
   text-align: center;
 }
 
@@ -52,6 +52,7 @@ button {
   background: yellow;
   cursor: pointer;
   margin-top: 20px;
+  font-weight: bold;
 }
 
 .back-btn {
@@ -60,38 +61,47 @@ button {
   right: 20px;
   color: white;
   text-decoration: none;
-  font-size: 16px;
-  background: rgba(0,0,0,0.5);
+  font-size: 14px;
+  background: rgba(0,0,0,0.6);
   padding: 8px 14px;
   border-radius: 20px;
-  z-index: 999;
+  z-index: 9999;
   transition: 0.3s ease;
 }
-
 .back-btn:hover {
   background: yellow;
   color: black;
 }
 
+.watermark {
+  position: fixed;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  opacity: 0.4;
+  z-index: 9999;
+  pointer-events: none;
+}
 </style>
 </head>
 
 <body>
 
 <a href="index.html" class="back-btn">← Volver</a>
+<div class="watermark">© 2026 PIXDARR - Darwin Rodriguez</div>
 
 <div id="startScreen" class="screen">
   <h1>🎮 TRAGA BOLAS</h1>
-  <p>Toca la pantalla o usa flechas</p>
-  <p style="position:absolute; bottom:15px; font-size:12px; opacity:0.5;">
-© 2026 PIXDARR
-</p>
-  <button onclick="startGame()">Empezar</button>
+  <p>Come las bolas blancas</p>
+  <p>Evita las rojas 🔴</p>
+  <button onclick="startGame()">EMPEZAR</button>
 </div>
 
 <div id="endScreen" class="screen" style="display:none;">
   <h2 id="finalScore"></h2>
-  <button onclick="restartGame()">Próximo Nivel</button>
+  <button onclick="nextLevel()">Siguiente Nivel</button>
+  <button onclick="resetGame()">Reiniciar Juego</button>
 </div>
 
 <canvas id="game"></canvas>
@@ -103,39 +113,56 @@ const startScreen = document.getElementById("startScreen");
 const endScreen = document.getElementById("endScreen");
 const finalScoreText = document.getElementById("finalScore");
 
-let player, balls, score, gameRunning;
-let keys = {};
-let mouse = { x: 0, y: 0 };
+let player, balls, enemies;
+let score = 0;
 let level = 1;
+let lives;
+let timeLeft;
+let highScore;
+let timer;
+let gameRunning = false;
+let invulnerable = false; // ✅ NUEVO
 
-// 🔥 Ajustar tamaño pantalla completa
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
-
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 function initGame() {
-  player = { 
-    x: canvas.width / 2, 
-    y: canvas.height / 2, 
+  player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
     radius: Math.min(canvas.width, canvas.height) * 0.03,
-    speed: Math.min(canvas.width, canvas.height) * 0.005
+    speed: 5
   };
 
   balls = [];
-  score = 0;
-  gameRunning = true;
+  enemies = [];
+  lives = 3;
+  invulnerable = false;
+  timeLeft = 30 - (level * 2);
+  if (timeLeft < 10) timeLeft = 10;
 
-  let totalBalls = 20 + (level * 10);
+  highScore = localStorage.getItem("pixdarr_highscore") || 0;
+
+  let totalBalls = 15 + level * 5;
 
   for (let i = 0; i < totalBalls; i++) {
     balls.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
       radius: player.radius * 0.4
+    });
+  }
+
+  for (let i = 0; i < level; i++) {
+    enemies.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      radius: player.radius * 0.6,
+      speed: 1.5 + level * 0.3
     });
   }
 }
@@ -145,45 +172,75 @@ function startGame() {
   endScreen.style.display = "none";
   canvas.style.display = "block";
   initGame();
+  startTimer();
+  gameRunning = true;
   gameLoop();
 }
 
-function restartGame() {
+function startTimer() {
+  clearInterval(timer);
+  timer = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) loseGame("⏰ Tiempo agotado");
+  }, 1000);
+}
+
+function loseGame(reason) {
+  gameRunning = false;
+  clearInterval(timer);
+  canvas.style.display = "none";
+  endScreen.style.display = "flex";
+
+  if (score > highScore) {
+    localStorage.setItem("pixdarr_highscore", score);
+  }
+
+  finalScoreText.innerText =
+    reason +
+    "\nNivel: " + level +
+    "\nPuntos: " + score +
+    "\nRécord: " + localStorage.getItem("pixdarr_highscore");
+}
+
+function nextLevel() {
   level++;
   startGame();
 }
 
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+function resetGame() {
+  level = 1;
+  score = 0;
+  startGame();
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowUp") player.y -= player.speed;
+  if (e.key === "ArrowDown") player.y += player.speed;
+  if (e.key === "ArrowLeft") player.x -= player.speed;
+  if (e.key === "ArrowRight") player.x += player.speed;
+});
 
 canvas.addEventListener("mousemove", e => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
+  const rect = canvas.getBoundingClientRect();
+  player.x = e.clientX - rect.left;
+  player.y = e.clientY - rect.top;
 });
 
 canvas.addEventListener("touchmove", e => {
-  mouse.x = e.touches[0].clientX;
-  mouse.y = e.touches[0].clientY;
-});
+  const rect = canvas.getBoundingClientRect();
+  const touch = e.touches[0];
+  player.x = touch.clientX - rect.left;
+  player.y = touch.clientY - rect.top;
+}, { passive: false });
 
 function update() {
   if (!gameRunning) return;
 
-  if (keys["ArrowUp"]) player.y -= player.speed;
-  if (keys["ArrowDown"]) player.y += player.speed;
-  if (keys["ArrowLeft"]) player.x -= player.speed;
-  if (keys["ArrowRight"]) player.x += player.speed;
-
-  let dx = mouse.x - player.x;
-  let dy = mouse.y - player.y;
-  player.x += dx * 0.05;
-  player.y += dy * 0.05;
-
+  // ===== bolas blancas =====
   balls = balls.filter(ball => {
     let dx = player.x - ball.x;
     let dy = player.y - ball.y;
-    let distance = Math.sqrt(dx * dx + dy * dy);
-
+    let distance = Math.sqrt(dx*dx + dy*dy);
     if (distance < player.radius + ball.radius) {
       score++;
       return false;
@@ -191,34 +248,82 @@ function update() {
     return true;
   });
 
+  // ===== enemigos =====
+  enemies.forEach(enemy => {
+    let dx = player.x - enemy.x;
+    let dy = player.y - enemy.y;
+    let distance = Math.sqrt(dx*dx + dy*dy);
+
+    // 🛡️ evitar NaN
+    if (distance < 0.0001) distance = 0.0001;
+
+    // movimiento hacia el jugador
+    enemy.x += (dx / distance) * enemy.speed;
+    enemy.y += (dy / distance) * enemy.speed;
+
+    // 💥 colisión
+    if (distance < player.radius + enemy.radius) {
+
+      // daño con cooldown
+      if (!invulnerable) {
+        lives--;
+        invulnerable = true;
+
+        setTimeout(() => {
+          invulnerable = false;
+        }, 1000);
+
+        if (lives <= 0) loseGame("💀 Sin vidas");
+      }
+
+      // 🚀 separación física
+      let overlap = (player.radius + enemy.radius) - distance;
+      let pushX = (dx / distance) * overlap;
+      let pushY = (dy / distance) * overlap;
+
+      enemy.x -= pushX;
+      enemy.y -= pushY;
+    }
+  });
+
   if (balls.length === 0) {
     gameRunning = false;
+    clearInterval(timer);
     canvas.style.display = "none";
     endScreen.style.display = "flex";
-    finalScoreText.innerText = 
-      "Nivel " + level + " completado 🎉\nPuntos: " + score;
+    finalScoreText.innerText =
+      "🎉 Nivel superado\nPuntos: " + score;
   }
 }
 
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
   ctx.beginPath();
-  ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-  ctx.fillStyle = "yellow";
+  ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
+  ctx.fillStyle = invulnerable ? "#ffaa00" : "yellow";
   ctx.fill();
 
   balls.forEach(ball => {
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
     ctx.fillStyle = "white";
+    ctx.fill();
+  });
+
+  enemies.forEach(enemy => {
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2);
+    ctx.fillStyle = "red";
     ctx.fill();
   });
 
   ctx.fillStyle = "white";
   ctx.font = "16px Arial";
   ctx.fillText("Nivel: " + level, 20, 30);
-  ctx.fillText("Puntos: " + score, 20, 55);
+  ctx.fillText("Puntos: " + score, 20, 50);
+  ctx.fillText("Vidas: " + "❤️".repeat(lives), 20, 70);
+  ctx.fillText("Tiempo: " + timeLeft, 20, 90);
 }
 
 function gameLoop() {
@@ -229,5 +334,4 @@ function gameLoop() {
 </script>
 
 </body>
-
 </html>
